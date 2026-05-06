@@ -17,6 +17,36 @@ def get_conn():
 def today_uae():
     return datetime.now(TIMEZONE).strftime("%Y-%m-%d")
 
+def init_db():
+    conn = get_conn()
+    cur  = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS uae_signals (
+            id         BIGSERIAL PRIMARY KEY,
+            symbol     TEXT,
+            signal     TEXT,
+            entry      NUMERIC,
+            stop       NUMERIC,
+            target     NUMERIC,
+            rsi        NUMERIC,
+            volume     BIGINT,
+            market     TEXT DEFAULT 'UAE',
+            date       DATE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+@app.route("/setup")
+def setup():
+    try:
+        init_db()
+        return jsonify({"status": "table created"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/")
 def index():
     return jsonify({
