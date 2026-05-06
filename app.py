@@ -1,45 +1,35 @@
 import os
-import json
+import psycopg2
+import psycopg2.extras
 from datetime import datetime
-
-import pytz
 from flask import Flask, jsonify, request
-from supabase import create_client, Client
+import pytz
 
 app = Flask(__name__)
 
-# ─── الإعدادات ───────────────────────────────────────────────
-TIMEZONE      = pytz.timezone("Asia/Dubai")  # UTC+4
+TIMEZONE      = pytz.timezone("Asia/Dubai")
 CLAUDE_SECRET = os.environ.get("UAE_CLAUDE_SECRET", "uae_claude_2026")
-SUPABASE_URL  = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY  = os.environ.get("SUPABASE_KEY")
+DATABASE_URL  = os.environ.get("DATABASE_URL")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+def get_conn():
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
 
-# ─── Helpers ─────────────────────────────────────────────────
 def today_uae():
     return datetime.now(TIMEZONE).strftime("%Y-%m-%d")
 
-def auth(req):
-    secret = req.args.get("secret") or req.json.get("secret", "") if req.is_json else req.args.get("secret", "")
-    return secret == CLAUDE_SECRET
-
-# ─── Health Check ─────────────────────────────────────────────
 @app.route("/")
 def index():
     return jsonify({
-        "service": "UAE ADX Signals API",
-        "status":  "running",
-        "time":    datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M"),
+        "service":  "UAE ADX Signals API",
+        "status":   "running",
+        "time":     datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M"),
         "timezone": "Asia/Dubai (UTC+4)"
     })
 
-# ─── Watchdog ────────────────────────────────────────────────
 @app.route("/watchdog")
 def watchdog():
     return jsonify({"ok": True, "time": datetime.now(TIMEZONE).isoformat()})
 
-# ─── تشغيل البوت ─────────────────────────────────────────────
 @app.route("/bot/run")
 def bot_run():
     if request.args.get("secret") != CLAUDE_SECRET:
@@ -51,67 +41,72 @@ def bot_run():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ─── إضافة إشارة ─────────────────────────────────────────────
 @app.route("/signals/add", methods=["POST"])
 def add_signal():
     data = request.get_json()
     if not data or data.get("secret") != CLAUDE_SECRET:
         return jsonify({"error": "unauthorized"}), 401
-
-    payload = {
-        "symbol":  data.get("symbol"),
-        "signal":  data.get("signal"),
-        "entry":   data.get("entry"),
-        "stop":    data.get("stop"),
-        "target":  data.get("target"),
-        "rsi":     data.get("rsi"),
-        "volume":  data.get("volume"),
-        "market":  "UAE",
-        "date":    today_uae(),
-        "created_at": datetime.now(TIMEZONE).isoformat(),
-    }
-
     try:
-        supabase.table("uae_signals").insert(payload).execute()
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO uae_signals
+                (symbol, signal, entry, stop, target, rsi, volume, market, date, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            data.get("symbol"),
+            data.get("signal"),
+            data.get("entry"),
+            data.get("stop"),
+            data.get("target"),
+            data.get("rsi"),
+            data.get("volume"),
+            "UAE",
+            today_uae(),
+            datetime.now(TIMEZONE).isoformat()
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ─── التحقق من تكرار الإشارة ─────────────────────────────────
 @app.route("/signals/check")
 def check_signal():
     symbol = request.args.get("symbol")
     date   = request.args.get("date", today_uae())
     try:
-        res = (
-            supabase.table("uae_signals")
-            .select("id")
-            .eq("symbol", symbol)
-            .eq("date", date)
-            .execute()
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT id FROM uae_signals WHERE symbol = %s AND date = %s",
+            (symbol, date)
         )
-        exists = len(res.data) > 0
+        exists = cur.fetchone() is not None
+        cur.close()
+        conn.close()
         return jsonify({"exists": exists})
     except Exception as e:
         return jsonify({"error": str(e), "exists": False}), 500
 
-# ─── جلب الإشارات ────────────────────────────────────────────
 @app.route("/signals")
 def get_signals():
     date = request.args.get("date", today_uae())
     try:
-        res = (
-            supabase.table("uae_signals")
-            .select("*")
-            .eq("date", date)
-            .order("created_at", desc=True)
-            .execute()
+        conn = get_conn()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM uae_signals WHERE date = %s ORDER BY created_at DESC",
+            (date,)
         )
-        return jsonify({"date": date, "signals": res.data})
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"date": date, "signals": [dict(r) for r in rows]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ─── Run ──────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
