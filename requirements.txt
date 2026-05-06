@@ -3,5 +3,9 @@ gunicorn
 psycopg2-binary
 yfinance
 pandas
+numpy
 pytz
 requests
+ta
+feedparser
+openpyxl
