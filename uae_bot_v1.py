@@ -668,6 +668,10 @@ def analyze(symbol):
     oil_s, oil_r = oil_macro_signal()
     score += oil_s; reasons += oil_r
 
+    # 17. سيولة الأجانب
+    fi_s, fi_r = foreign_investor_signal()
+    score += fi_s; reasons += fi_r
+
     # فلاتر رفض
     dist = (last["close"] - last["ema50"]) / last["ema50"] * 100
     if dist > 10:
@@ -918,6 +922,63 @@ def already_sent_today(symbol):
     except Exception as e:
         print(f"already_sent_today: {e}")
     return False
+
+# =========================
+# سيولة الأجانب — ADX
+# =========================
+
+def foreign_investor_signal():
+    score, reasons = 0, []
+    try:
+        res = requests.get(
+            "https://www.adx.ae/ar/market-data/foreign-investors",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10
+        )
+        if res.status_code != 200:
+            return 0, []
+
+        text = res.text
+
+        # ابحث عن صافي الأجانب في الصفحة
+        import re
+        patterns = [
+            r'صافي[^0-9\-]*([+\-]?\d[\d,\.]+)',
+            r'net[^0-9\-]*([+\-]?\d[\d,\.]+)',
+            r'foreign[^0-9\-]*([+\-]?\d[\d,\.]+)',
+        ]
+
+        net_value = None
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                raw = match.group(1).replace(",", "")
+                try:
+                    net_value = float(raw)
+                    break
+                except Exception:
+                    pass
+
+        if net_value is not None:
+            if net_value >= 50_000_000:
+                score += 20
+                reasons.append(f"🌍 أجانب يشترون بقوة: +{net_value/1e6:.0f}M AED")
+            elif net_value >= 10_000_000:
+                score += 10
+                reasons.append(f"🌍 أجانب مشترون: +{net_value/1e6:.0f}M AED")
+            elif net_value <= -50_000_000:
+                score -= 25
+                reasons.append(f"🌍 أجانب يبيعون بقوة: {net_value/1e6:.0f}M AED")
+            elif net_value <= -10_000_000:
+                score -= 15
+                reasons.append(f"🌍 أجانب بائعون: {net_value/1e6:.0f}M AED")
+        else:
+            print("foreign_investor_signal: لم يتم العثور على البيانات")
+
+    except Exception as e:
+        print(f"foreign_investor_signal: {e}")
+
+    return score, reasons
 
 # =========================
 # تتبع الإشارات المفتوحة
