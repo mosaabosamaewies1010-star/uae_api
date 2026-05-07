@@ -920,6 +920,90 @@ def already_sent_today(symbol):
     return False
 
 # =========================
+# تتبع الإشارات المفتوحة
+# =========================
+
+def track_open_signals():
+    import yfinance as yf
+    try:
+        res = requests.get(f"{RENDER_API_URL}/signals/open", timeout=10)
+        if res.status_code != 200:
+            return
+        signals = res.json().get("signals", [])
+        if not signals:
+            return
+
+        print(f"تتبع {len(signals)} إشارة مفتوحة...")
+
+        for s in signals:
+            symbol = s.get("symbol")
+            sig_id = s.get("id")
+            tp1    = float(s.get("tp1") or 0)
+            tp2    = float(s.get("tp2") or 0)
+            sl     = float(s.get("stop") or 0)
+            entry  = float(s.get("entry") or 0)
+
+            if not symbol or not entry:
+                continue
+
+            try:
+                df = yf.download(symbol, period="5d", interval="1d",
+                                 progress=False, auto_adjust=True)
+                if df is None or len(df) == 0:
+                    continue
+
+                high  = float(df["High"].iloc[-1])
+                low   = float(df["Low"].iloc[-1])
+                close = float(df["Close"].iloc[-1])
+
+                hit_tp2 = tp2 > 0 and high >= tp2
+                hit_tp1 = tp1 > 0 and high >= tp1
+                hit_sl  = sl  > 0 and low  <= sl
+
+                if not hit_tp1 and not hit_sl:
+                    continue
+
+                if hit_tp2:
+                    status  = "tp2_hit"
+                    pnl_pct = (tp2 - entry) / entry * 100
+                elif hit_tp1:
+                    status  = "tp1_hit"
+                    pnl_pct = (tp1 - entry) / entry * 100
+                else:
+                    status  = "stopped"
+                    pnl_pct = (sl - entry) / entry * 100
+
+                requests.post(
+                    f"{RENDER_API_URL}/signals/update",
+                    json={
+                        "id":          sig_id,
+                        "status":      status,
+                        "pnl_pct":     round(pnl_pct, 2),
+                        "hit_tp1":     hit_tp1,
+                        "hit_tp2":     hit_tp2,
+                        "hit_sl":      hit_sl,
+                        "result_date": now_dubai().strftime("%Y-%m-%d"),
+                        "secret":      os.environ.get("UAE_CLAUDE_SECRET", "uae_claude_2026"),
+                    },
+                    timeout=10
+                )
+
+                emoji = "✅" if pnl_pct > 0 else "❌"
+                msg = (
+                    f"{emoji} <b>نتيجة — {symbol.replace('.AD','')}</b>\n"
+                    f"الحالة: {status}\n"
+                    f"P&L: {pnl_pct:+.1f}%"
+                )
+                send(msg)
+                print(f"{symbol}: {status} {pnl_pct:+.1f}%")
+
+            except Exception as e:
+                print(f"track {symbol}: {e}")
+
+    except Exception as e:
+        print(f"track_open_signals: {e}")
+
+# =========================
 # RUN
 # =========================
 
@@ -956,6 +1040,8 @@ def run_bot():
     fetch_uae_news()
     print("حساب القطاعات...")
     calc_sector_strength()
+    print("تتبع الإشارات المفتوحة...")
+    track_open_signals()
 
     print("بدأ الفحص...")
     send("🔍 <b>UAE ADX Bot — بدأ الفحص...</b>")

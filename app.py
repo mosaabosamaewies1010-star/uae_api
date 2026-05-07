@@ -170,6 +170,54 @@ def get_all_signals():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/signals/open")
+def get_open_signals():
+    try:
+        conn = get_conn()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM uae_signals WHERE status = 'open' OR status IS NULL ORDER BY created_at DESC"
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"signals": [dict(r) for r in rows]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/signals/update", methods=["POST"])
+def update_signal():
+    data = request.get_json()
+    if not data or data.get("secret") != CLAUDE_SECRET:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            UPDATE uae_signals
+            SET status      = %s,
+                pnl_pct     = %s,
+                hit_tp1     = %s,
+                hit_tp2     = %s,
+                hit_sl      = %s,
+                result_date = %s
+            WHERE id = %s
+        """, (
+            data.get("status"),
+            data.get("pnl_pct"),
+            data.get("hit_tp1"),
+            data.get("hit_tp2"),
+            data.get("hit_sl"),
+            data.get("result_date"),
+            data.get("id"),
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"status": "updated"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
