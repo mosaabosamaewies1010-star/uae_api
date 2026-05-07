@@ -412,6 +412,54 @@ def news_sentiment(symbol):
     return score, reasons
 
 # =========================
+# النفط والماكرو
+# =========================
+
+def oil_macro_signal():
+    import yfinance as yf
+    score, reasons = 0, []
+
+    # سعر النفط
+    try:
+        oil = yf.download("CL=F", period="5d", interval="1d", progress=False, auto_adjust=True)
+        if oil is not None and len(oil) >= 2:
+            oil_price = float(oil["Close"].iloc[-1])
+            oil_prev  = float(oil["Close"].iloc[-2])
+            oil_change = (oil_price - oil_prev) / oil_prev * 100
+
+            if oil_price >= 85:
+                score += 15
+                reasons.append(f"🛢️ النفط قوي {oil_price:.1f}$ (+{oil_change:.1f}%)")
+            elif oil_price >= 70:
+                score += 0
+                reasons.append(f"🛢️ النفط محايد {oil_price:.1f}$")
+            elif oil_price >= 60:
+                score -= 20
+                reasons.append(f"🛢️ النفط ضعيف {oil_price:.1f}$ — ضغط على السوق")
+            else:
+                score -= 35
+                reasons.append(f"🛢️ النفط منهار {oil_price:.1f}$ — خطر كبير")
+    except Exception as e:
+        print(f"oil_macro_signal oil: {e}")
+
+    # الفائدة الأمريكية — 10Y Treasury كمؤشر
+    try:
+        tnx = yf.download("^TNX", period="10d", interval="1d", progress=False, auto_adjust=True)
+        if tnx is not None and len(tnx) >= 5:
+            rate_now  = float(tnx["Close"].iloc[-1])
+            rate_prev = float(tnx["Close"].iloc[-5])
+            if rate_now < rate_prev - 0.1:
+                score += 10
+                reasons.append(f"🏦 الفائدة تنخفض {rate_now:.2f}% — إيجابي للأسهم")
+            elif rate_now > rate_prev + 0.1:
+                score -= 10
+                reasons.append(f"🏦 الفائدة ترتفع {rate_now:.2f}% — ضغط على الأسهم")
+    except Exception as e:
+        print(f"oil_macro_signal rate: {e}")
+
+    return score, reasons
+
+# =========================
 # قوة القطاع
 # =========================
 
@@ -573,6 +621,10 @@ def analyze(symbol):
     # 15. قطاع
     sec_s, sec_r = sector_signal(symbol)
     score += sec_s; reasons += sec_r
+
+    # 16. النفط والماكرو
+    oil_s, oil_r = oil_macro_signal()
+    score += oil_s; reasons += oil_r
 
     # فلاتر رفض
     dist = (last["close"] - last["ema50"]) / last["ema50"] * 100
@@ -800,7 +852,7 @@ def send_monthly_report():
 
 def is_trading_time():
     now = now_dubai()
-    if now.weekday() in [5, 6]:
+    if now.weekday() in [4, 5]:
         return False
     cur   = now.hour * 60 + now.minute
     start = MARKET_OPEN_HOUR  * 60 + START_DELAY_MIN
@@ -837,12 +889,20 @@ def run_bot():
     now = now_dubai()
     print(f"[{now.strftime('%Y-%m-%d %H:%M')}] started")
 
-    
+    try:
+        health = requests.get(RENDER_API_URL + "/watchdog", timeout=10)
+        if health.status_code != 200:
+            return {"status": "api_error"}
+        print("API OK")
+    except Exception as e:
+        print(f"API unreachable: {e}")
+        return {"status": "api_error"}
+
     tomorrow = now + timedelta(days=1)
     if tomorrow.day == 1 and now.weekday() not in [4, 5]:
         send_monthly_report()
 
-    if now.weekday() == 4 and now.hour >= 15:
+    if now.weekday() == 3 and now.hour >= 15:
         send_weekly_report()
         return {"status": "weekly_report_sent"}
 
