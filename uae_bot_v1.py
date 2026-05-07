@@ -59,25 +59,60 @@ SCORE_MINIMUM = 40
 LOG_FILE = "uae_signals_log.xlsx"
 
 SYMBOLS = [
-    "ADIB.AD", "DIB.AD", "SIB.AD", "AJIB.AD",
-    "ALDAR.AD", "ESHRAQ.AD",
-    "TAQA.AD", "FERTIGLOBE.AD",
-    "ETISALAT.AD",
-    "METHAQ.AD", "TKFL.AD", "SALAMA.AD",
-    "AGTHIA.AD", "FOODCO.AD",
-    "IHC.AD", "MULTIPLY.AD", "GFH.AD",
-    "GPBM.AD", "PIHC.AD",
+    # بنوك إسلامية
+    "ADIB.AD",        # Abu Dhabi Islamic Bank
+    "DIB.AD",         # Dubai Islamic Bank
+    "SIB.AD",         # Sharjah Islamic Bank
+    "AJIB.AD",        # Ajman Bank
+
+    # عقارات
+    "ALDAR.AD",       # Aldar Properties
+    "ESHRAQ.AD",      # Eshraq Investments
+
+    # طاقة وبتروكيماويات
+    "TAQA.AD",        # Abu Dhabi National Energy
+    "FERTIGLOBE.AD",  # Fertiglobe
+    "ADNOCGAS.AD",    # ADNOC Gas
+    "ADNOCDRILL.AD",  # ADNOC Drilling
+    "BOROUGE.AD",     # Borouge
+
+    # اتصالات
+    "ETISALAT.AD",    # e& (اتصالات)
+
+    # تأمين إسلامي
+    "METHAQ.AD",      # Methaq Takaful
+    "TKFL.AD",        # Al Wathba Insurance
+    "SALAMA.AD",      # Islamic Arab Insurance
+
+    # غذاء ومطاعم
+    "AGTHIA.AD",      # Agthia Group
+    "FOODCO.AD",      # Foodco Holding
+    "AMERICANA.AD",   # Americana Restaurants
+
+    # نقل وخدمات
+    "SALIK.AD",       # Salik (رسوم المرور)
+
+    # استثمار ومتنوع
+    "IHC.AD",         # International Holding Company
+    "MULTIPLY.AD",    # Multiply Group
+    "GFH.AD",         # Gulf Finance House
+
+    # صناعة
+    "GPBM.AD",        # Gulf Pharmaceutical
+    "PIHC.AD",        # Primus International Holding
+    "NPCC.AD",        # National Petroleum Construction
 ]
 
 SECTORS = {
     "بنوك إسلامية": ["ADIB.AD", "DIB.AD", "SIB.AD", "AJIB.AD"],
     "عقارات":       ["ALDAR.AD", "ESHRAQ.AD"],
-    "طاقة":         ["TAQA.AD", "FERTIGLOBE.AD"],
+    "طاقة":         ["TAQA.AD", "FERTIGLOBE.AD", "ADNOCGAS.AD", "ADNOCDRILL.AD", "BOROUGE.AD"],
     "اتصالات":      ["ETISALAT.AD"],
     "تأمين":        ["METHAQ.AD", "TKFL.AD", "SALAMA.AD"],
-    "غذاء":         ["AGTHIA.AD", "FOODCO.AD"],
+    "غذاء":         ["AGTHIA.AD", "FOODCO.AD", "AMERICANA.AD"],
+    "نقل":          ["SALIK.AD"],
     "استثمار":      ["IHC.AD", "MULTIPLY.AD", "GFH.AD"],
-    "صناعة":        ["GPBM.AD", "PIHC.AD"],
+    "صناعة":        ["GPBM.AD", "PIHC.AD", "NPCC.AD"],
 }
 
 NEWS_CACHE    = {}
