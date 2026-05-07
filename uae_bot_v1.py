@@ -380,19 +380,61 @@ def multi_timeframe_confirm(symbol):
 
 def fetch_uae_news():
     feeds = [
-        "https://feeds.feedburner.com/zawya/business",
-        "https://mubasher.info/rss",
+        # Reuters عربي
+        "https://feeds.reuters.com/reuters/businessNews",
+        "https://ar.reuters.com/rssFeed/businessNews",
+        # Bloomberg الشرق
+        "https://feeds.bloomberg.com/markets/news.rss",
+        # Zawya
+        "https://www.zawya.com/rss/ae/",
+        # Mubasher
+        "https://mubasher.info/rss/ae",
     ]
     items = []
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for e in feed.entries[:10]:
-                items.append({"title": e.get("title", ""), "summary": e.get("summary", "")})
+            for e in feed.entries[:15]:
+                items.append({
+                    "title":   e.get("title", ""),
+                    "summary": e.get("summary", ""),
+                    "source":  url.split("/")[2]
+                })
         except Exception:
             pass
+
+    # ADX الموقع الرسمي
+    try:
+        res = requests.get(
+            "https://www.adx.ae/ar/news",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10
+        )
+        if res.status_code == 200:
+            from html.parser import HTMLParser
+            class NewsParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.titles = []
+                    self.in_title = False
+                def handle_starttag(self, tag, attrs):
+                    attrs_dict = dict(attrs)
+                    if "news-title" in attrs_dict.get("class", ""):
+                        self.in_title = True
+                def handle_data(self, data):
+                    if self.in_title and data.strip():
+                        self.titles.append(data.strip())
+                        self.in_title = False
+            parser = NewsParser()
+            parser.feed(res.text)
+            for t in parser.titles[:10]:
+                items.append({"title": t, "summary": "", "source": "adx.ae"})
+    except Exception:
+        pass
+
     NEWS_CACHE["items"] = items
     NEWS_CACHE["time"]  = now_dubai()
+    print(f"أخبار: {len(items)} خبر من {len(feeds)+1} مصدر")
 
 def news_sentiment(symbol):
     ticker = symbol.replace(".AD", "").upper()
