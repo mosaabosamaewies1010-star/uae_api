@@ -800,7 +800,7 @@ def send_monthly_report():
 
 def is_trading_time():
     now = now_dubai()
-    if now.weekday() in [4, 5]:
+    if now.weekday() in [5, 6]:
         return False
     cur   = now.hour * 60 + now.minute
     start = MARKET_OPEN_HOUR  * 60 + START_DELAY_MIN
@@ -842,7 +842,7 @@ def run_bot():
     if tomorrow.day == 1 and now.weekday() not in [4, 5]:
         send_monthly_report()
 
-    if now.weekday() == 3 and now.hour >= 15:
+    if now.weekday() == 4 and now.hour >= 15:
         send_weekly_report()
         return {"status": "weekly_report_sent"}
 

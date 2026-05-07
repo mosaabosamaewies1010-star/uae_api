@@ -28,7 +28,15 @@ def init_db():
             entry      NUMERIC,
             stop       NUMERIC,
             target     NUMERIC,
+            tp1        NUMERIC,
+            tp2        NUMERIC,
+            grade      TEXT,
+            score      INTEGER,
+            rr         NUMERIC,
             rsi        NUMERIC,
+            adx        NUMERIC,
+            support    NUMERIC,
+            resistance NUMERIC,
             volume     BIGINT,
             market     TEXT DEFAULT 'UAE',
             date       DATE,
@@ -43,7 +51,7 @@ def init_db():
 def setup():
     try:
         init_db()
-        return jsonify({"status": "table created"})
+        return jsonify({"status": "table ready"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -81,16 +89,26 @@ def add_signal():
         cur  = conn.cursor()
         cur.execute("""
             INSERT INTO uae_signals
-                (symbol, signal, entry, stop, target, rsi, volume, market, date, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (symbol, signal, entry, stop, target,
+                 tp1, tp2, grade, score, rr,
+                 rsi, adx, support, resistance,
+                 market, date, created_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             data.get("symbol"),
             data.get("signal"),
             data.get("entry"),
             data.get("stop"),
-            data.get("target"),
+            data.get("tp1"),
+            data.get("tp1"),
+            data.get("tp2"),
+            data.get("grade"),
+            data.get("score"),
+            data.get("rr"),
             data.get("rsi"),
-            data.get("volume"),
+            data.get("adx"),
+            data.get("support"),
+            data.get("resistance"),
             "UAE",
             today_uae(),
             datetime.now(TIMEZONE).isoformat()
@@ -127,13 +145,28 @@ def get_signals():
         conn = get_conn()
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT * FROM uae_signals WHERE date = %s ORDER BY created_at DESC",
+            "SELECT * FROM uae_signals WHERE date = %s ORDER BY score DESC, created_at DESC",
             (date,)
         )
         rows = cur.fetchall()
         cur.close()
         conn.close()
         return jsonify({"date": date, "signals": [dict(r) for r in rows]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/signals/all")
+def get_all_signals():
+    try:
+        conn = get_conn()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM uae_signals ORDER BY created_at DESC LIMIT 500"
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"signals": [dict(r) for r in rows], "count": len(rows)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
