@@ -1111,15 +1111,6 @@ def run_bot():
     now = now_dubai()
     print(f"[{now.strftime('%Y-%m-%d %H:%M')}] started")
 
-    try:
-        health = requests.get(RENDER_API_URL + "/watchdog", timeout=10)
-        if health.status_code != 200:
-            return {"status": "api_error"}
-        print("API OK")
-    except Exception as e:
-        print(f"API unreachable: {e}")
-        return {"status": "api_error"}
-
     tomorrow = now + timedelta(days=1)
     if tomorrow.day == 1 and now.weekday() not in [4, 5]:
         send_monthly_report()
