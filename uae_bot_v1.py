@@ -805,28 +805,34 @@ def format_signal(s):
 
 def send_to_api(s):
     try:
-        payload = {
-            "symbol":     s["symbol"],
-            "signal":     "BUY",
-            "grade":      s["grade"],
-            "score":      s["score"],
-            "entry":      s["entry"],
-            "stop":       s["sl"],
-            "tp1":        s["tp1"],
-            "tp2":        s["tp2"],
-            "rr":         s["rr"],
-            "rsi":        s["rsi"],
-            "adx":        s["adx"],
-            "support":    s["support"],
-            "resistance": s["resistance"],
-            "market":     "UAE",
-            "secret":     os.environ.get("UAE_CLAUDE_SECRET", "uae_claude_2026"),
-        }
-        res = requests.post(RENDER_API_URL + "/signals/add", json=payload, timeout=15)
-        if res.status_code == 200:
-            print(f"API saved: {s['symbol']}")
-        else:
-            print(f"API error: {res.status_code}")
+        import psycopg2
+        conn = get_db_conn()
+        if not conn:
+            print("send_to_api: no DB connection")
+            return
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO uae_signals
+                (symbol, signal, entry, stop, target,
+                 tp1, tp2, grade, score, rr,
+                 rsi, adx, support, resistance,
+                 market, date, created_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            s["symbol"], "BUY",
+            s["entry"], s["sl"], s["tp1"],
+            s["tp1"], s["tp2"],
+            s["grade"], s["score"], round(s["rr"], 2),
+            round(s["rsi"], 1), round(s["adx"], 1),
+            s["support"], s["resistance"],
+            "UAE",
+            now_dubai().strftime("%Y-%m-%d"),
+            now_dubai().isoformat()
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"DB saved: {s['symbol']}")
     except Exception as e:
         print(f"send_to_api: {e}")
 
@@ -859,25 +865,23 @@ def log_signal(s):
 # =========================
 
 def fetch_signals_period(period="week"):
+    import psycopg2.extras
     try:
-        res = requests.get(f"{RENDER_API_URL}/signals", timeout=10)
-        if res.status_code != 200:
+        conn = get_db_conn()
+        if not conn:
             return []
-        signals = res.json().get("signals", [])
-        now = now_dubai()
-        result = []
-        for s in signals:
-            try:
-                if period == "week":
-                    d = datetime.strptime(str(s.get("date", "")), "%Y-%m-%d")
-                    if (now - d).days <= 7:
-                        result.append(s)
-                elif period == "month":
-                    if str(s.get("date", "")).startswith(now.strftime("%Y-%m")):
-                        result.append(s)
-            except Exception:
-                pass
-        return result
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        now  = now_dubai()
+        if period == "week":
+            from_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+            cur.execute("SELECT * FROM uae_signals WHERE date >= %s ORDER BY created_at DESC", (from_date,))
+        else:
+            month_start = now.strftime("%Y-%m-01")
+            cur.execute("SELECT * FROM uae_signals WHERE date >= %s ORDER BY created_at DESC", (month_start,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [dict(r) for r in rows]
     except Exception as e:
         print(f"fetch_signals_period: {e}")
         return []
@@ -944,19 +948,31 @@ def is_trading_time():
 # منع التكرار
 # =========================
 
+def get_db_conn():
+    import psycopg2
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        return None
+    return psycopg2.connect(db_url, sslmode="require")
+
 def already_sent_today(symbol):
     try:
         today = now_dubai().strftime("%Y-%m-%d")
-        res   = requests.get(
-            f"{RENDER_API_URL}/signals/check",
-            params={"symbol": symbol, "date": today},
-            timeout=10
+        conn  = get_db_conn()
+        if not conn:
+            return False
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id FROM uae_signals WHERE symbol = %s AND date = %s",
+            (symbol, today)
         )
-        if res.status_code == 200:
-            return res.json().get("exists", False)
+        exists = cur.fetchone() is not None
+        cur.close()
+        conn.close()
+        return exists
     except Exception as e:
         print(f"already_sent_today: {e}")
-    return False
+        return False
 
 # =========================
 # سيولة الأجانب — ADX
@@ -1021,16 +1037,19 @@ def foreign_investor_signal():
 
 def track_open_signals():
     import yfinance as yf
+    import psycopg2.extras
     try:
-        res = requests.get(f"{RENDER_API_URL}/signals/open", timeout=10)
-        if res.status_code != 200:
+        conn = get_db_conn()
+        if not conn:
             return
-        signals = res.json().get("signals", [])
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM uae_signals WHERE status = 'open' OR status IS NULL")
+        signals = cur.fetchall()
+        cur.close()
         if not signals:
+            conn.close()
             return
-
         print(f"تتبع {len(signals)} إشارة مفتوحة...")
-
         for s in signals:
             symbol = s.get("symbol")
             sig_id = s.get("id")
@@ -1038,27 +1057,20 @@ def track_open_signals():
             tp2    = float(s.get("tp2") or 0)
             sl     = float(s.get("stop") or 0)
             entry  = float(s.get("entry") or 0)
-
             if not symbol or not entry:
                 continue
-
             try:
                 df = yf.download(symbol, period="5d", interval="1d",
                                  progress=False, auto_adjust=True)
                 if df is None or len(df) == 0:
                     continue
-
-                high  = float(df["High"].iloc[-1])
-                low   = float(df["Low"].iloc[-1])
-                close = float(df["Close"].iloc[-1])
-
+                high = float(df["High"].iloc[-1])
+                low  = float(df["Low"].iloc[-1])
                 hit_tp2 = tp2 > 0 and high >= tp2
                 hit_tp1 = tp1 > 0 and high >= tp1
                 hit_sl  = sl  > 0 and low  <= sl
-
                 if not hit_tp1 and not hit_sl:
                     continue
-
                 if hit_tp2:
                     status  = "tp2_hit"
                     pnl_pct = (tp2 - entry) / entry * 100
@@ -1068,34 +1080,22 @@ def track_open_signals():
                 else:
                     status  = "stopped"
                     pnl_pct = (sl - entry) / entry * 100
-
-                requests.post(
-                    f"{RENDER_API_URL}/signals/update",
-                    json={
-                        "id":          sig_id,
-                        "status":      status,
-                        "pnl_pct":     round(pnl_pct, 2),
-                        "hit_tp1":     hit_tp1,
-                        "hit_tp2":     hit_tp2,
-                        "hit_sl":      hit_sl,
-                        "result_date": now_dubai().strftime("%Y-%m-%d"),
-                        "secret":      os.environ.get("UAE_CLAUDE_SECRET", "uae_claude_2026"),
-                    },
-                    timeout=10
-                )
-
+                upd = conn.cursor()
+                upd.execute("""
+                    UPDATE uae_signals
+                    SET status=%s, pnl_pct=%s, hit_tp1=%s, hit_tp2=%s,
+                        hit_sl=%s, result_date=%s
+                    WHERE id=%s
+                """, (status, round(pnl_pct,2), hit_tp1, hit_tp2, hit_sl,
+                      now_dubai().strftime("%Y-%m-%d"), sig_id))
+                conn.commit()
+                upd.close()
                 emoji = "✅" if pnl_pct > 0 else "❌"
-                msg = (
-                    f"{emoji} <b>نتيجة — {symbol.replace('.AD','')}</b>\n"
-                    f"الحالة: {status}\n"
-                    f"P&L: {pnl_pct:+.1f}%"
-                )
-                send(msg)
+                send(f"{emoji} <b>نتيجة — {symbol.replace('.AD','')}</b>\nالحالة: {status}\nP&L: {pnl_pct:+.1f}%")
                 print(f"{symbol}: {status} {pnl_pct:+.1f}%")
-
             except Exception as e:
                 print(f"track {symbol}: {e}")
-
+        conn.close()
     except Exception as e:
         print(f"track_open_signals: {e}")
 
