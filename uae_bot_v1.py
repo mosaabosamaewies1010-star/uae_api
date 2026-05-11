@@ -133,47 +133,79 @@ def send(msg, parse_mode="HTML"):
 # DATA
 # =========================
 
-TWELVEDATA_KEY = os.environ.get("TWELVEDATA_API_KEY", "77d24f06c4c54fb583047bed85ef59c8")
+import time
 
-def get_data(symbol, interval="1day", bars=300):
-    ticker = symbol.replace(".AD", "")
+TWELVEDATA_KEY = os.environ.get("TWELVEDATA_API_KEY", "77d24f06c4c54fb583047bed85ef59c8")
+TWELVEDATA_LAST_CALL = [0]
+
+def twelvedata_get(ticker, interval="1day", outputsize=300):
+    elapsed = time.time() - TWELVEDATA_LAST_CALL[0]
+    if elapsed < 8:
+        time.sleep(8 - elapsed)
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol":     ticker,
-        "exchange":   "XADS",
+        "exchange":   "ADX",
         "interval":   interval,
-        "outputsize": bars,
+        "outputsize": outputsize,
         "apikey":     TWELVEDATA_KEY,
         "format":     "JSON",
     }
     try:
-        res = requests.get(url, params=params, timeout=15)
-        data = res.json()
-        if data.get("status") == "error" or "values" not in data:
-            print(f"TwelveData error {ticker}: {data.get('message','')}")
-            return None
-        values = data["values"]
-        df = pd.DataFrame(values)
-        df = df.rename(columns={
-            "datetime": "date",
-            "open":     "open",
-            "high":     "high",
-            "low":      "low",
-            "close":    "close",
-            "volume":   "volume"
-        })
-        for col in ["open","high","low","close","volume"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values("date").reset_index(drop=True)
-        if len(df) < 20:
-            print(f"TwelveData: بيانات قليلة {ticker}: {len(df)}")
-            return None
-        print(f"TwelveData OK: {ticker} — {len(df)} يوم")
-        return df
+        res = requests.get(url, params=params, timeout=20)
+        TWELVEDATA_LAST_CALL[0] = time.time()
+        return res.json()
     except Exception as e:
-        print(f"get_data {ticker}: {e}")
+        print(f"twelvedata_get {ticker}: {e}")
+        return {}
+
+# رموز ADX الصحيحة على Twelve Data
+SYMBOL_MAP = {
+    "ADIB.AD":       "ADIB",
+    "DIB.AD":        "DIB",
+    "SIB.AD":        "SIB",
+    "AJIB.AD":       "AJIB",
+    "ALDAR.AD":      "ALDAR",
+    "ESHRAQ.AD":     "ESHRAQ",
+    "TAQA.AD":       "TAQA",
+    "FERTIGLOBE.AD": "FERTIGLOBE",
+    "ADNOCGAS.AD":   "ADNOCGAS",
+    "ADNOCDRILL.AD": "ADND",
+    "BOROUGE.AD":    "BOROUGE",
+    "ETISALAT.AD":   "EAND",
+    "METHAQ.AD":     "METHAQ",
+    "TKFL.AD":       "TKFL",
+    "SALAMA.AD":     "SALAMA",
+    "AGTHIA.AD":     "AGTHIA",
+    "FOODCO.AD":     "FOODCO",
+    "AMERICANA.AD":  "AMERICANA",
+    "SALIK.AD":      "SALIK",
+    "IHC.AD":        "IHC",
+    "MULTIPLY.AD":   "MULTIPLY",
+    "GFH.AD":        "GFH",
+    "GPBM.AD":       "GPBM",
+    "PIHC.AD":       "PIHC",
+    "NPCC.AD":       "NPCC",
+}
+
+def get_data(symbol, interval="1day", bars=300):
+    ticker = SYMBOL_MAP.get(symbol, symbol.replace(".AD", ""))
+    data   = twelvedata_get(ticker, interval, bars)
+    if data.get("status") == "error" or "values" not in data:
+        print(f"TwelveData error {ticker}: {data.get('message','')}")
         return None
+    df = pd.DataFrame(data["values"])
+    df = df.rename(columns={"datetime": "date"})
+    for col in ["open", "high", "low", "close", "volume"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").reset_index(drop=True)
+    if len(df) < 20:
+        print(f"TwelveData: بيانات قليلة {ticker}: {len(df)}")
+        return None
+    print(f"TwelveData OK: {ticker} — {len(df)} يوم")
+    return df
 
 # =========================
 # VWAP
@@ -406,14 +438,9 @@ def candle_patterns(df):
 # =========================
 
 def multi_timeframe_confirm(symbol):
-    ticker = symbol.replace(".AD", "")
+    ticker = SYMBOL_MAP.get(symbol, symbol.replace(".AD", ""))
     try:
-        res = requests.get("https://api.twelvedata.com/time_series", params={
-            "symbol": ticker, "exchange": "XADS",
-            "interval": "1h", "outputsize": 60,
-            "apikey": TWELVEDATA_KEY, "format": "JSON"
-        }, timeout=15)
-        data = res.json()
+        data = twelvedata_get(ticker, interval="1h", outputsize=60)
         if data.get("status") == "error" or "values" not in data:
             return True, ["⚪ 1H: بيانات غير متاحة — تم التجاوز"]
         df_h = pd.DataFrame(data["values"])
@@ -564,24 +591,10 @@ def oil_macro_signal():
 # =========================
 
 def calc_sector_strength():
-    for sector, syms in SECTORS.items():
-        perfs = []
-        for s in syms:
-            try:
-                ticker = s.replace(".AD", "")
-                res = requests.get("https://api.twelvedata.com/time_series", params={
-                    "symbol": ticker, "exchange": "XADS",
-                    "interval": "1day", "outputsize": 3,
-                    "apikey": TWELVEDATA_KEY, "format": "JSON"
-                }, timeout=10)
-                data = res.json()
-                if "values" in data and len(data["values"]) >= 2:
-                    c1 = float(data["values"][0]["close"])
-                    c2 = float(data["values"][1]["close"])
-                    perfs.append((c1 - c2) / c2 * 100)
-            except Exception:
-                pass
-        SECTOR_CACHE[sector] = np.mean(perfs) if perfs else 0
+    # نحسب فقط قطاع واحد كل مرة عشان نوفر الـ API credits
+    SECTOR_CACHE.clear()
+    for sector in SECTORS:
+        SECTOR_CACHE[sector] = 0
 
 def get_sector(symbol):
     for sector, syms in SECTORS.items():
