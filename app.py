@@ -47,6 +47,27 @@ def init_db():
     cur.close()
     conn.close()
 
+@app.route("/migrate")
+def migrate():
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            ALTER TABLE uae_signals
+            ADD COLUMN IF NOT EXISTS status      TEXT DEFAULT 'open',
+            ADD COLUMN IF NOT EXISTS result_date DATE,
+            ADD COLUMN IF NOT EXISTS pnl_pct     NUMERIC,
+            ADD COLUMN IF NOT EXISTS hit_tp1     BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS hit_tp2     BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS hit_sl      BOOLEAN DEFAULT FALSE
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"status": "migration done"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/setup")
 def setup():
     try:
