@@ -73,9 +73,11 @@ def bot_run():
     if request.args.get("secret") != CLAUDE_SECRET:
         return jsonify({"error": "unauthorized"}), 401
     try:
+        import threading
         from uae_bot_v1 import run_bot
-        result = run_bot()
-        return jsonify(result)
+        t = threading.Thread(target=run_bot, daemon=True)
+        t.start()
+        return jsonify({"status": "started"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
