@@ -133,32 +133,47 @@ def send(msg, parse_mode="HTML"):
 # DATA
 # =========================
 
-def get_data(symbol, interval="1d", bars=300):
-    import yfinance as yf
+TWELVEDATA_KEY = os.environ.get("TWELVEDATA_API_KEY", "77d24f06c4c54fb583047bed85ef59c8")
 
+def get_data(symbol, interval="1day", bars=300):
+    ticker = symbol.replace(".AD", "")
+    url = "https://api.twelvedata.com/time_series"
+    params = {
+        "symbol":     ticker,
+        "exchange":   "XADS",
+        "interval":   interval,
+        "outputsize": bars,
+        "apikey":     TWELVEDATA_KEY,
+        "format":     "JSON",
+    }
     try:
-        df = yf.download(symbol, period="2y", interval="1d", progress=False, auto_adjust=True)
-        if df is not None and len(df) > 50:
-            df = df.reset_index()
-            df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
-            print(f"yfinance OK: {symbol}")
-            return df
+        res = requests.get(url, params=params, timeout=15)
+        data = res.json()
+        if data.get("status") == "error" or "values" not in data:
+            print(f"TwelveData error {ticker}: {data.get('message','')}")
+            return None
+        values = data["values"]
+        df = pd.DataFrame(values)
+        df = df.rename(columns={
+            "datetime": "date",
+            "open":     "open",
+            "high":     "high",
+            "low":      "low",
+            "close":    "close",
+            "volume":   "volume"
+        })
+        for col in ["open","high","low","close","volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").reset_index(drop=True)
+        if len(df) < 20:
+            print(f"TwelveData: بيانات قليلة {ticker}: {len(df)}")
+            return None
+        print(f"TwelveData OK: {ticker} — {len(df)} يوم")
+        return df
     except Exception as e:
-        print(f"yfinance .AD failed {symbol}: {e}")
-
-    try:
-        base = symbol.replace(".AD", "")
-        df = yf.download(base, period="2y", interval="1d", progress=False, auto_adjust=True)
-        if df is not None and len(df) > 50:
-            df = df.reset_index()
-            df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
-            print(f"yfinance plain OK: {base}")
-            return df
-    except Exception as e:
-        print(f"yfinance plain failed: {e}")
-
-    print(f"no data: {symbol}")
-    return None
+        print(f"get_data {ticker}: {e}")
+        return None
 
 # =========================
 # VWAP
@@ -391,17 +406,25 @@ def candle_patterns(df):
 # =========================
 
 def multi_timeframe_confirm(symbol):
-    import yfinance as yf
+    ticker = symbol.replace(".AD", "")
     try:
-        df_h = yf.download(symbol, period="60d", interval="1h", progress=False, auto_adjust=True)
-        if df_h is None or len(df_h) < 20:
-            return True, ["⚪ 1H: بيانات غير كافية — تم التجاوز"]
-        df_h.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df_h.columns]
+        res = requests.get("https://api.twelvedata.com/time_series", params={
+            "symbol": ticker, "exchange": "XADS",
+            "interval": "1h", "outputsize": 60,
+            "apikey": TWELVEDATA_KEY, "format": "JSON"
+        }, timeout=15)
+        data = res.json()
+        if data.get("status") == "error" or "values" not in data:
+            return True, ["⚪ 1H: بيانات غير متاحة — تم التجاوز"]
+        df_h = pd.DataFrame(data["values"])
+        df_h["close"] = pd.to_numeric(df_h["close"], errors="coerce")
+        df_h = df_h.sort_values("datetime").reset_index(drop=True)
+        if len(df_h) < 20:
+            return True, ["⚪ 1H: بيانات قليلة — تم التجاوز"]
         ema20 = ta.trend.ema_indicator(df_h["close"], window=20).iloc[-1]
         ema50 = ta.trend.ema_indicator(df_h["close"], window=50).iloc[-1]
         rsi1h = ta.momentum.rsi(df_h["close"], window=14).iloc[-1]
-        strongly_bearish = (ema20 < ema50 * 0.98 and rsi1h < 40)
-        if strongly_bearish:
+        if ema20 < ema50 * 0.98 and rsi1h < 40:
             return False, ["❌ 1H هابط بقوة — تجنّب"]
         if ema20 > ema50:
             return True, ["✅ 1H مؤكد — ترند صاعد"]
@@ -541,15 +564,21 @@ def oil_macro_signal():
 # =========================
 
 def calc_sector_strength():
-    import yfinance as yf
     for sector, syms in SECTORS.items():
         perfs = []
         for s in syms:
             try:
-                df = yf.download(s, period="5d", interval="1d", progress=False, auto_adjust=True)
-                if df is not None and len(df) >= 2:
-                    ret = (float(df["Close"].iloc[-1]) - float(df["Close"].iloc[-2])) / float(df["Close"].iloc[-2]) * 100
-                    perfs.append(ret)
+                ticker = s.replace(".AD", "")
+                res = requests.get("https://api.twelvedata.com/time_series", params={
+                    "symbol": ticker, "exchange": "XADS",
+                    "interval": "1day", "outputsize": 3,
+                    "apikey": TWELVEDATA_KEY, "format": "JSON"
+                }, timeout=10)
+                data = res.json()
+                if "values" in data and len(data["values"]) >= 2:
+                    c1 = float(data["values"][0]["close"])
+                    c2 = float(data["values"][1]["close"])
+                    perfs.append((c1 - c2) / c2 * 100)
             except Exception:
                 pass
         SECTOR_CACHE[sector] = np.mean(perfs) if perfs else 0
@@ -1036,7 +1065,6 @@ def foreign_investor_signal():
 # =========================
 
 def track_open_signals():
-    import yfinance as yf
     import psycopg2.extras
     try:
         conn = get_db_conn()
@@ -1060,12 +1088,17 @@ def track_open_signals():
             if not symbol or not entry:
                 continue
             try:
-                df = yf.download(symbol, period="5d", interval="1d",
-                                 progress=False, auto_adjust=True)
-                if df is None or len(df) == 0:
+                ticker = symbol.replace(".AD", "")
+                res = requests.get("https://api.twelvedata.com/time_series", params={
+                    "symbol": ticker, "exchange": "XADS",
+                    "interval": "1day", "outputsize": 3,
+                    "apikey": TWELVEDATA_KEY, "format": "JSON"
+                }, timeout=10)
+                data = res.json()
+                if "values" not in data:
                     continue
-                high = float(df["High"].iloc[-1])
-                low  = float(df["Low"].iloc[-1])
+                high = float(data["values"][0]["high"])
+                low  = float(data["values"][0]["low"])
                 hit_tp2 = tp2 > 0 and high >= tp2
                 hit_tp1 = tp1 > 0 and high >= tp1
                 hit_sl  = sl  > 0 and low  <= sl
@@ -1091,7 +1124,7 @@ def track_open_signals():
                 conn.commit()
                 upd.close()
                 emoji = "✅" if pnl_pct > 0 else "❌"
-                send(f"{emoji} <b>نتيجة — {symbol.replace('.AD','')}</b>\nالحالة: {status}\nP&L: {pnl_pct:+.1f}%")
+                send(f"{emoji} <b>نتيجة — {ticker}</b>\nالحالة: {status}\nP&L: {pnl_pct:+.1f}%")
                 print(f"{symbol}: {status} {pnl_pct:+.1f}%")
             except Exception as e:
                 print(f"track {symbol}: {e}")
