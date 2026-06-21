@@ -117,6 +117,7 @@ SECTORS = {
 
 NEWS_CACHE    = {}
 SECTOR_CACHE  = {}
+ADX_IDX_RET5D = {"value": None, "date": None}
 
 # =========================
 # TELEGRAM
@@ -612,6 +613,49 @@ def sector_signal(symbol):
     return score, reasons
 
 # =========================
+# القوة النسبية مقابل DFM/ADX Index
+# =========================
+
+def calc_adx_baseline():
+    """يحسب عائد مؤشر DFM خلال آخر 5 أيام — مرة واحدة في بداية كل run"""
+    global ADX_IDX_RET5D
+    today = now_dubai().strftime("%Y-%m-%d")
+    if ADX_IDX_RET5D["date"] == today and ADX_IDX_RET5D["value"] is not None:
+        return
+    try:
+        import yfinance as yf
+        # DFMGI هو مؤشر سوق دبي المالي — الأكثر تداولاً في البيانات المجانية
+        df = yf.download("^DFMGI", period="30d", interval="1d", progress=False, auto_adjust=True)
+        if df is not None and len(df) >= 6:
+            df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
+            ret = (df["close"].iloc[-1] - df["close"].iloc[-5]) / df["close"].iloc[-5] * 100
+            ADX_IDX_RET5D["value"] = round(float(ret), 2)
+            ADX_IDX_RET5D["date"]  = today
+            print(f"📊 DFMGI عائد 5 أيام: {ret:.2f}%")
+    except Exception as e:
+        print(f"⚠️ ADX baseline: {e}")
+
+def relative_strength_adx(df):
+    """يقيس قوة السهم مقارنةً بمؤشر DFMGI خلال آخر 5 أيام"""
+    idx_ret = ADX_IDX_RET5D.get("value")
+    if idx_ret is None or len(df) < 6:
+        return 0, []
+    try:
+        stk_ret = (float(df["close"].iloc[-1]) - float(df["close"].iloc[-5])) / float(df["close"].iloc[-5]) * 100
+        rs = stk_ret - idx_ret
+        if rs >= 3:
+            return 20, [f"💪 قوة نسبية {rs:+.1f}% فوق DFMGI — أداء متميز"]
+        elif rs >= 1:
+            return 10, [f"✅ قوة نسبية {rs:+.1f}% فوق DFMGI"]
+        elif rs <= -3:
+            return -15, [f"📉 ضعيف {rs:+.1f}% مقارنةً بـ DFMGI"]
+        elif rs <= -1:
+            return -5, [f"⚠️ أداء أقل من DFMGI ({rs:+.1f}%)"]
+    except Exception:
+        pass
+    return 0, []
+
+# =========================
 # حجم المركز
 # =========================
 
@@ -644,9 +688,6 @@ def analyze(symbol):
     df["ema200"] = ta.trend.ema_indicator(close, window=200)
     df["rsi"]    = ta.momentum.rsi(close, window=14)
 
-    macd_obj          = ta.trend.MACD(close)
-    df["macd_hist"]   = macd_obj.macd_diff()
-
     bb             = ta.volatility.BollingerBands(close, window=20, window_dev=2)
     df["bb_mid"]   = bb.bollinger_mavg()
 
@@ -672,24 +713,29 @@ def analyze(symbol):
     elif last["ema20"] > last["ema50"]:
         score += 12; reasons.append("⚠️ EMA20>50 جزئي")
 
-    # 2. RSI
+    # 2. RSI — Hard filter عند 70
     rsi = last["rsi"]
-    if 45 < rsi < 68:
+    if rsi >= 70:
+        return None  # ارتفع بالفعل — مفيش فرصة دخول
+    if 45 < rsi < 65:
         score += 15; reasons.append(f"✅ RSI={rsi:.0f} مثالي")
-    elif 68 <= rsi < 75:
-        score += 5
-    elif rsi >= 75:
-        score -= 15; reasons.append(f"❌ RSI={rsi:.0f} تشبع")
+    elif 65 <= rsi < 70:
+        score += 5;  reasons.append(f"⚠️ RSI={rsi:.0f} مرتفع")
+    elif rsi < 35:
+        score -= 10; reasons.append(f"❌ RSI={rsi:.0f} تشبع بيع")
 
-    # 3. MACD
-    if last["macd_hist"] > 0 and prev["macd_hist"] <= 0:
-        score += 15; reasons.append("✅ MACD تقاطع صاعد الآن")
-    elif last["macd_hist"] > 0:
-        score += 7
+    # 3. MACD — محذوف (مؤشر متأخر، 0% قيمة تنبؤية)
 
-    # 4. Bollinger
+    # 4. Bollinger breakout — مشروط بالحجم
     if last["close"] > last["bb_mid"] and prev["close"] <= prev["bb_mid"]:
-        score += 10; reasons.append("✅ اخترق Bollinger للأعلى")
+        _avg_vol = df["volume"].iloc[-15:-1].mean() if df["volume"].sum() > 0 else 0
+        _cur_vol = float(df["volume"].iloc[-1])
+        if _avg_vol > 0 and _cur_vol >= _avg_vol * 1.5:
+            score += 10; reasons.append("✅ اخترق Bollinger للأعلى بحجم قوي 🔥")
+        elif _avg_vol > 0 and _cur_vol >= _avg_vol * 0.8:
+            score += 5;  reasons.append("⚠️ اخترق Bollinger — حجم متوسط")
+        else:
+            score += 2;  reasons.append("⚠️ اخترق Bollinger بدون حجم كافٍ")
     elif last["close"] > last["bb_mid"]:
         score += 4
 
@@ -749,6 +795,11 @@ def analyze(symbol):
     fi_s, fi_r = foreign_investor_signal()
     score += fi_s; reasons += fi_r
 
+    # 18. قوة نسبية vs DFMGI
+    rs_s, rs_r = relative_strength_adx(df)
+    if rs_s != 0:
+        score += rs_s; reasons += rs_r
+
     # فلاتر رفض
     dist = (last["close"] - last["ema50"]) / last["ema50"] * 100
     if dist > 10:
@@ -780,6 +831,12 @@ def analyze(symbol):
 
     sr_s, sr_r, support, resistance = support_resistance(df, price)
     score += sr_s; reasons += sr_r
+
+    # Hard filter: قريب جداً من المقاومة = رفض فوري
+    if resistance > price:
+        _gap = (resistance - price) / price * 100
+        if _gap < 3.0:
+            return None
 
     shares, total_inv = calc_position_size(price, sl)
 
@@ -1173,6 +1230,8 @@ def run_bot():
     fetch_uae_news()
     print("حساب القطاعات...")
     calc_sector_strength()
+    print("📈 حساب القوة النسبية vs DFMGI...")
+    calc_adx_baseline()
     print("تتبع الإشارات المفتوحة...")
     track_open_signals()
 
@@ -1187,6 +1246,12 @@ def run_bot():
         print(f"  ← {symbol}", end="\r")
         r = analyze(symbol)
         if r:
+            # حد أقصى سهمين من نفس القطاع
+            _sector = get_sector(symbol)
+            _count  = sum(1 for x in results if get_sector(x["symbol"]) == _sector)
+            if _count >= 2:
+                print(f"  ⏭ {symbol} — حد القطاع {_sector} (2 أسهم)")
+                continue
             results.append(r)
 
     results.sort(key=lambda x: x["score"], reverse=True)
