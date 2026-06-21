@@ -1036,7 +1036,8 @@ def send_monthly_report():
 
 def is_trading_time():
     now = now_dubai()
-    if now.weekday() in [4, 5]:
+    # ADX/DFM: الاثنين-الجمعة (0-4) — السبت(5) والأحد(6) عطلة
+    if now.weekday() in [5, 6]:
         return False
     cur   = now.hour * 60 + now.minute
     start = MARKET_OPEN_HOUR  * 60 + START_DELAY_MIN
@@ -1218,7 +1219,8 @@ def run_bot():
     if tomorrow.day == 1 and now.weekday() not in [4, 5]:
         send_monthly_report()
 
-    if now.weekday() == 3 and now.hour >= 15:
+    # الجمعة (4) = آخر يوم تداول في الإمارات → تقرير أسبوعي
+    if now.weekday() == 4 and now.hour >= 15:
         send_weekly_report()
         return {"status": "weekly_report_sent"}
 
