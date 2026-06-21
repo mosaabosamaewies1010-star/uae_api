@@ -59,60 +59,108 @@ SCORE_MINIMUM = 40
 LOG_FILE = "uae_signals_log.xlsx"
 
 SYMBOLS = [
-    # بنوك إسلامية
+    # ─── بنوك إسلامية (4) ───
     "ADIB.AD",        # Abu Dhabi Islamic Bank
     "DIB.AD",         # Dubai Islamic Bank
     "SIB.AD",         # Sharjah Islamic Bank
     "AJIB.AD",        # Ajman Bank
 
-    # عقارات
+    # ─── عقارات وتشييد (6) ───
     "ALDAR.AD",       # Aldar Properties
     "ESHRAQ.AD",      # Eshraq Investments
+    "MODON.AD",       # Modon Holding — مناطق صناعية
+    "RAKPROP.AD",     # RAK Properties
+    "MANAZEL.AD",     # Manazel Real Estate
+    "BILDCO.AD",      # Abu Dhabi National Building Materials
 
-    # طاقة وبتروكيماويات
+    # ─── طاقة وبتروكيماويات (9) ───
     "TAQA.AD",        # Abu Dhabi National Energy
     "FERTIGLOBE.AD",  # Fertiglobe
     "ADNOCGAS.AD",    # ADNOC Gas
     "ADNOCDRILL.AD",  # ADNOC Drilling
     "BOROUGE.AD",     # Borouge
+    "ADNOCDIST.AD",   # ADNOC Distribution
+    "ADNOCLS.AD",     # ADNOC Logistics
+    "DANA.AD",        # Dana Gas
+    "NMDCENR.AD",     # NMDC Energy
 
-    # اتصالات
-    "ETISALAT.AD",    # e& (اتصالات)
+    # ─── اتصالات وتقنية (3) ───
+    "ETISALAT.AD",    # e& (Etisalat)
+    "SPACE42.AD",     # Space42 — تقنية فضائية
+    "PRESIGHT.AD",    # Presight AI
 
-    # تأمين إسلامي
+    # ─── تأمين إسلامي — تكافل (3) ───
     "METHAQ.AD",      # Methaq Takaful
-    "TKFL.AD",        # Al Wathba Insurance
-    "SALAMA.AD",      # Islamic Arab Insurance
+    "TKFL.AD",        # Abu Dhabi National Takaful
+    "SALAMA.AD",      # Islamic Arab Insurance (SALAMA)
 
-    # غذاء ومطاعم
+    # ─── غذاء ومطاعم (4) ───
     "AGTHIA.AD",      # Agthia Group
     "FOODCO.AD",      # Foodco Holding
     "AMERICANA.AD",   # Americana Restaurants
+    "GHITHA.AD",      # Ghitha Holding — توزيع غذائي
 
-    # نقل وخدمات
-    "SALIK.AD",       # Salik (رسوم المرور)
+    # ─── نقل وخدمات لوجستية (6) ───
+    "SALIK.AD",       # Salik — رسوم مرور
+    "ADPORTS.AD",     # Abu Dhabi Ports
+    "ADAVIATION.AD",  # Abu Dhabi Aviation
+    "AGILITY.AD",     # Agility Global
+    "ASM.AD",         # Al Seer Marine
+    "ADSB.AD",        # Abu Dhabi Ship Building
 
-    # استثمار ومتنوع
+    # ─── استثمار وقابضة (6) ───
     "IHC.AD",         # International Holding Company
     "MULTIPLY.AD",    # Multiply Group
     "GFH.AD",         # Gulf Finance House
+    "ALPHADHABI.AD",  # Alpha Dhabi Holding
+    "WAHA.AD",        # Al Waha Capital
+    "APEX.AD",        # Apex Investment
 
-    # صناعة
+    # ─── صناعة وكيماويات (9) ───
     "GPBM.AD",        # Gulf Pharmaceutical
     "PIHC.AD",        # Primus International Holding
     "NPCC.AD",        # National Petroleum Construction
+    "NMDC.AD",        # NMDC Group
+    "EMSTEEL.AD",     # EMSTEEL Building Materials
+    "RAKCEC.AD",      # RAK Ceramics
+    "SCIDC.AD",       # Sharjah Cement
+    "RAKWCT.AD",      # RAK White Cement
+    "GCEM.AD",        # Gulf Cement
+
+    # ─── رعاية صحية (4) ───
+    "PUREHEALTH.AD",  # Pure Health Holding
+    "BURJEEL.AD",     # Burjeel Healthcare
+    "JULPHAR.AD",     # Gulf Pharmaceutical Industries
+    "RPM.AD",         # Response Plus Holding
+
+    # ─── تعليم وخدمات (3) ───
+    "ALEFEDT.AD",     # Alef Education
+    "LULU.AD",        # Lulu Retail Holdings
+    "SAWAEED.AD",     # Sawaeed Holding
+
+    # ─── مواد بناء (3) ───
+    "FBI.AD",         # Fujairah Building Industries
+    "GCEM.AD",        # Gulf Cement (مكرر — سيُتجاهل)
+    "FCI.AD",         # Fujairah Cement Industries
 ]
+# إزالة التكرار مع الحفاظ على الترتيب
+_seen = set()
+SYMBOLS = [s for s in SYMBOLS if not (_seen.add(s) or s in _seen)]
 
 SECTORS = {
     "بنوك إسلامية": ["ADIB.AD", "DIB.AD", "SIB.AD", "AJIB.AD"],
-    "عقارات":       ["ALDAR.AD", "ESHRAQ.AD"],
-    "طاقة":         ["TAQA.AD", "FERTIGLOBE.AD", "ADNOCGAS.AD", "ADNOCDRILL.AD", "BOROUGE.AD"],
-    "اتصالات":      ["ETISALAT.AD"],
+    "عقارات":       ["ALDAR.AD", "ESHRAQ.AD", "MODON.AD", "RAKPROP.AD", "MANAZEL.AD", "BILDCO.AD"],
+    "طاقة":         ["TAQA.AD", "FERTIGLOBE.AD", "ADNOCGAS.AD", "ADNOCDRILL.AD", "BOROUGE.AD",
+                     "ADNOCDIST.AD", "ADNOCLS.AD", "DANA.AD", "NMDCENR.AD"],
+    "اتصالات":      ["ETISALAT.AD", "SPACE42.AD", "PRESIGHT.AD"],
     "تأمين":        ["METHAQ.AD", "TKFL.AD", "SALAMA.AD"],
-    "غذاء":         ["AGTHIA.AD", "FOODCO.AD", "AMERICANA.AD"],
-    "نقل":          ["SALIK.AD"],
-    "استثمار":      ["IHC.AD", "MULTIPLY.AD", "GFH.AD"],
-    "صناعة":        ["GPBM.AD", "PIHC.AD", "NPCC.AD"],
+    "غذاء":         ["AGTHIA.AD", "FOODCO.AD", "AMERICANA.AD", "GHITHA.AD"],
+    "نقل":          ["SALIK.AD", "ADPORTS.AD", "ADAVIATION.AD", "AGILITY.AD", "ASM.AD", "ADSB.AD"],
+    "استثمار":      ["IHC.AD", "MULTIPLY.AD", "GFH.AD", "ALPHADHABI.AD", "WAHA.AD", "APEX.AD"],
+    "صناعة":        ["GPBM.AD", "PIHC.AD", "NPCC.AD", "NMDC.AD", "EMSTEEL.AD",
+                     "RAKCEC.AD", "SCIDC.AD", "RAKWCT.AD", "GCEM.AD", "FBI.AD", "FCI.AD"],
+    "صحة":          ["PUREHEALTH.AD", "BURJEEL.AD", "JULPHAR.AD", "RPM.AD"],
+    "تعليم وتجزئة": ["ALEFEDT.AD", "LULU.AD", "SAWAEED.AD"],
 }
 
 NEWS_CACHE    = {}
@@ -162,31 +210,76 @@ def twelvedata_get(ticker, interval="1day", outputsize=300):
 
 # رموز ADX الصحيحة على Twelve Data
 SYMBOL_MAP = {
-    "ADIB.AD":       "ADIB",
-    "DIB.AD":        "DIB",
-    "SIB.AD":        "SIB",
-    "AJIB.AD":       "AJIB",
-    "ALDAR.AD":      "ALDAR",
-    "ESHRAQ.AD":     "ESHRAQ",
-    "TAQA.AD":       "TAQA",
-    "FERTIGLOBE.AD": "FERTIGLOBE",
-    "ADNOCGAS.AD":   "ADNOCGAS",
-    "ADNOCDRILL.AD": "ADND",
-    "BOROUGE.AD":    "BOROUGE",
-    "ETISALAT.AD":   "EAND",
-    "METHAQ.AD":     "METHAQ",
-    "TKFL.AD":       "TKFL",
-    "SALAMA.AD":     "SALAMA",
-    "AGTHIA.AD":     "AGTHIA",
-    "FOODCO.AD":     "FOODCO",
-    "AMERICANA.AD":  "AMERICANA",
-    "SALIK.AD":      "SALIK",
-    "IHC.AD":        "IHC",
-    "MULTIPLY.AD":   "MULTIPLY",
-    "GFH.AD":        "GFH",
-    "GPBM.AD":       "GPBM",
-    "PIHC.AD":       "PIHC",
-    "NPCC.AD":       "NPCC",
+    # بنوك إسلامية
+    "ADIB.AD":        "ADIB",
+    "DIB.AD":         "DIB",
+    "SIB.AD":         "SIB",
+    "AJIB.AD":        "AJIB",
+    # عقارات
+    "ALDAR.AD":       "ALDAR",
+    "ESHRAQ.AD":      "ESHRAQ",
+    "MODON.AD":       "MODON",
+    "RAKPROP.AD":     "RAKPROP",
+    "MANAZEL.AD":     "MANAZEL",
+    "BILDCO.AD":      "BILDCO",
+    # طاقة
+    "TAQA.AD":        "TAQA",
+    "FERTIGLOBE.AD":  "FERTIGLOBE",
+    "ADNOCGAS.AD":    "ADNOCGAS",
+    "ADNOCDRILL.AD":  "ADND",
+    "BOROUGE.AD":     "BOROUGE",
+    "ADNOCDIST.AD":   "ADNOCDIST",
+    "ADNOCLS.AD":     "ADNOCLS",
+    "DANA.AD":        "DANA",
+    "NMDCENR.AD":     "NMDCENR",
+    # اتصالات وتقنية
+    "ETISALAT.AD":    "EAND",
+    "SPACE42.AD":     "SPACE42",
+    "PRESIGHT.AD":    "PRESIGHT",
+    # تأمين
+    "METHAQ.AD":      "METHAQ",
+    "TKFL.AD":        "TKFL",
+    "SALAMA.AD":      "SALAMA",
+    # غذاء
+    "AGTHIA.AD":      "AGTHIA",
+    "FOODCO.AD":      "FOODCO",
+    "AMERICANA.AD":   "AMERICANA",
+    "GHITHA.AD":      "GHITHA",
+    # نقل
+    "SALIK.AD":       "SALIK",
+    "ADPORTS.AD":     "ADPORTS",
+    "ADAVIATION.AD":  "ADAVIATION",
+    "AGILITY.AD":     "AGILITY",
+    "ASM.AD":         "ASM",
+    "ADSB.AD":        "ADSB",
+    # استثمار
+    "IHC.AD":         "IHC",
+    "MULTIPLY.AD":    "MULTIPLY",
+    "GFH.AD":         "GFH",
+    "ALPHADHABI.AD":  "ALPHADHABI",
+    "WAHA.AD":        "WAHA",
+    "APEX.AD":        "APEX",
+    # صناعة
+    "GPBM.AD":        "GPBM",
+    "PIHC.AD":        "PIHC",
+    "NPCC.AD":        "NPCC",
+    "NMDC.AD":        "NMDC",
+    "EMSTEEL.AD":     "EMSTEEL",
+    "RAKCEC.AD":      "RAKCEC",
+    "SCIDC.AD":       "SCIDC",
+    "RAKWCT.AD":      "RAKWCT",
+    "GCEM.AD":        "GCEM",
+    "FBI.AD":         "FBI",
+    "FCI.AD":         "FCI",
+    # صحة
+    "PUREHEALTH.AD":  "PUREHEALTH",
+    "BURJEEL.AD":     "BURJEEL",
+    "JULPHAR.AD":     "JULPHAR",
+    "RPM.AD":         "RPM",
+    # تعليم وتجزئة
+    "ALEFEDT.AD":     "ALEFEDT",
+    "LULU.AD":        "LULU",
+    "SAWAEED.AD":     "SAWAEED",
 }
 
 def get_data(symbol, interval="1day", bars=300):
